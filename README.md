@@ -11,6 +11,8 @@ Senior Software Engineer with 16 years of experience across backend, frontend, m
 - **[python-perf-optimization](https://github.com/echaro/python-perf-optimization)** — Three real performance anti-patterns, each with a naive baseline, an optimized fix, tests proving they're behaviorally identical, and measured benchmarks (up to ~2000x speedup) — not estimated, actually run.
 - **[java-legacy-refactor](https://github.com/echaro/java-legacy-refactor)** — A single untested "god class" order-pricing module, refactored into separated, tested components. The git history is the point: commit 1 is the legacy baseline (including a real `double`-for-money precision bug), commit 2 is the full refactor with 23 tests.
 - **[typescript-task-scheduler](https://github.com/echaro/typescript-task-scheduler)** — A concurrency-limited async task scheduler with full-jitter exponential backoff retry (the approach AWS recommends to avoid thundering-herd retries), fully typed and tested deterministically in ~1 second.
+- **[llm-eval-harness](https://github.com/echaro/llm-eval-harness)** — A provider-agnostic harness for running and grading LLM eval suites (exact/contains/regex/JSON-schema graders), fully mockable so the test suite needs zero API keys or network calls.
+- **[llm-token-cost-estimator](https://github.com/echaro/llm-token-cost-estimator)** — Token count and cost estimation for LLM requests with a pluggable pricing table; upfront about what's a heuristic vs. exact, and fails loudly instead of guessing on an unrecognized model.
 
 #### Reach me
 
