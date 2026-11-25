@@ -1,0 +1,13 @@
+order_id,customer,country,amount,currency,created_at
+1001,Ana Lopez,ES,120.50,EUR,2026-01-03
+1002,bob smith,us,35,USD,2026-01-04
+1003,,ES,80,EUR,2026-01-04
+1004,Carla Ruiz,MX,abc,MXN,2026-01-05
+1005,Ana Lopez,ES,42.10,EUR,2026-02-01
+1002,bob smith,us,35,USD,2026-01-04
+1006,Dev Patel,IN,2999,INR,2026-02-03
+1007,Emma Stone,US,-5,USD,2026-02-07
+1008, frank Moll ,de,310.00,EUR,2026-02-11
+1009,Gia Rossi,IT,88.8,EUR,not-a-date
+1010,Hiro Tanaka,JP,15000,JPY,2026-03-02
+1011,Carla Ruiz,MX,1250,MXN,2026-03-05
