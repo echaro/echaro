@@ -1,12 +1,22 @@
 /* Python Academy — tiny SPA, no build step.
- * Routes:  #/                 home
- *          #/<track>/<step>   a step (1-based)
+ * Routes:  #                  home
+ *          #<track>-<step>    a step (1-based), e.g. #api-5  (old #/api/5 links still work)
  * Python runs in the browser through Pyodide (CPython compiled to WebAssembly),
  * loaded lazily the first time you press Run. */
 (() => {
   "use strict";
 
-  const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
+  // A host page can point at a bundled copy of Pyodide (window.PYODIDE_URL) and declare that
+  // extra packages such as pandas are unavailable there (window.PYODIDE_PACKAGES = false).
+  const PYODIDE_URL = window.PYODIDE_URL
+    ? new URL(window.PYODIDE_URL, location.href).href
+    : "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
+  const PACKAGES_OK = window.PYODIDE_PACKAGES !== false;
+  // window.PYTHON_LIVE = false: a host that can't run Python at all; Run shows recorded output.
+  const PYTHON_LIVE = window.PYTHON_LIVE !== false;
+  const OUTPUTS = window.OUTPUTS || {};
+  const PACKAGE_IMPORT = /^\s*(?:import|from)\s+(pandas|pydantic|numpy)\b/m;
+  const href = (trackId, n) => `#${trackId}-${n}`;
   const TRACKS = window.TRACKS;
   const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -82,14 +92,14 @@
         s.onload = async () => {
           try { resolve(await window.loadPyodide({ indexURL: PYODIDE_URL })); } catch (e) { reject(e); }
         };
-        s.onerror = () => reject(new Error("Could not load Pyodide. Are you offline? Run the labs locally instead."));
+        s.onerror = () => reject(new Error("Live Python could not load (are you offline?)."));
         document.head.appendChild(s);
       }).catch((e) => { pyodidePromise = null; throw e; });
     }
     return pyodidePromise;
   }
 
-  async function runPython(code, consoleEl) {
+  async function runPython(code, consoleEl, stepKey, original) {
     consoleEl.innerHTML = '<span class="label">output</span>';
     const log = (text, cls = "") => {
       const span = document.createElement("span");
@@ -98,11 +108,34 @@
       consoleEl.appendChild(span);
       consoleEl.scrollTop = consoleEl.scrollHeight;
     };
+    const showRecorded = (why) => {
+      log(why, "sys");
+      if (OUTPUTS[stepKey] === undefined) return;
+      log(code === original
+        ? "Recorded output of this code:\n"
+        : "You edited the code, but this is the recorded output of the original version:\n", "sys");
+      log(OUTPUTS[stepKey]);
+    };
+    if (!PYTHON_LIVE) {
+      showRecorded("This online copy shows recorded output. To edit and run code live, start the app " +
+        "on your computer (python serve.py).");
+      return;
+    }
+    if (!PACKAGES_OK) {
+      const pkg = code.match(PACKAGE_IMPORT);
+      if (pkg) {
+        showRecorded(`This step uses ${pkg[1]}, which can't load in this hosted version. ` +
+          "Run it locally (python serve.py) to experiment with it.");
+        return;
+      }
+    }
     try {
       const py = await getPyodide(log);
       py.setStdout({ batched: (s) => log(s) });
       py.setStderr({ batched: (s) => log(s, "tk-dec") });
-      await py.loadPackagesFromImports(code, { messageCallback: (m) => log(m, "sys"), errorCallback: (m) => log(m, "err") });
+      if (PACKAGES_OK) {
+        await py.loadPackagesFromImports(code, { messageCallback: (m) => log(m, "sys"), errorCallback: (m) => log(m, "err") });
+      }
       const ns = py.globals.get("dict")();
       ns.set("__name__", "__main__");
       const t0 = performance.now();
@@ -110,6 +143,10 @@
       ns.destroy();
       log(`\n✓ finished in ${Math.round(performance.now() - t0)} ms`, "sys");
     } catch (e) {
+      if (!pyodidePromise) {         // Python itself failed to load
+        showRecorded(String(e.message || e));
+        return;
+      }
       // Keep only the user-relevant part of the traceback.
       const msg = String(e.message || e);
       const i = msg.indexOf('File "<exec>"');
@@ -149,14 +186,14 @@
   // ---------------------------------------------------------------- top tabs + sidebar
   function renderTabs(activeId) {
     $("#track-tabs").innerHTML = TRACKS.map((t) =>
-      `<a href="#/${t.id}/1" class="${t.id === activeId ? "active" : ""}">${t.icon} ${t.title}</a>`).join("");
+      `<a href="${href(t.id, 1)}" class="${t.id === activeId ? "active" : ""}">${t.icon} ${t.title}</a>`).join("");
   }
 
   function renderSidebar(track, stepIdx) {
     const el = $("#sidebar");
     if (!track) {
       el.innerHTML = `<div class="side-title">Tracks</div><ul class="step-list">` +
-        TRACKS.map((t) => `<li><a href="#/${t.id}/1"><span class="step-num">${t.icon}</span>
+        TRACKS.map((t) => `<li><a href="${href(t.id, 1)}"><span class="step-num">${t.icon}</span>
           <span class="step-title">${t.title}<br><small>${trackProgress(t)}/${t.steps.length} done</small></span></a></li>`).join("") +
         `</ul>`;
       return;
@@ -167,8 +204,9 @@
       <div class="progress"><span style="width:${pct}%"></span></div>
       <ol class="step-list">${track.steps.map((s, i) => {
         const key = `${track.id}/${i + 1}`;
+        const link = href(track.id, i + 1);
         const cls = [i === stepIdx ? "active" : "", done.has(key) ? "done" : ""].join(" ");
-        return `<li><a href="#/${key}" class="${cls}"><span class="step-num">${done.has(key) ? "✓" : i + 1}</span>
+        return `<li><a href="${link}" class="${cls}"><span class="step-num">${done.has(key) ? "✓" : i + 1}</span>
           <span class="step-title">${s.title}</span></a></li>`;
       }).join("")}</ol>`;
   }
@@ -186,7 +224,7 @@
         Every step lights up one stage, shows the data at that point, and gives you <b>runnable Python</b> next to the Java/C# you already know.</p>
       </section>
       <div class="cards">${TRACKS.map((t) => `
-        <a class="card" href="#/${t.id}/1">
+        <a class="card" href="${href(t.id, 1)}">
           <span class="icon">${t.icon}</span>
           <h3>${t.title}</h3>
           <p>${t.tagline}</p>
@@ -219,8 +257,8 @@
       return `<button class="node ${cls}" data-node="${n.id}">${n.label}</button>${link}`;
     }).join("");
 
-    const prev = idx > 0 ? `#/${track.id}/${idx}` : null;
-    const next = idx < track.steps.length - 1 ? `#/${track.id}/${idx + 2}` : null;
+    const prev = idx > 0 ? href(track.id, idx) : null;
+    const next = idx < track.steps.length - 1 ? href(track.id, idx + 2) : null;
     const nextTrack = TRACKS[TRACKS.indexOf(track) + 1];
 
     $("#main").innerHTML = `
@@ -239,7 +277,7 @@
         </div>
         <div class="nav-btns">
           <button class="btn" data-go="${prev || ""}" ${prev ? "" : "disabled"}>← Prev</button>
-          <button class="btn primary" data-go="${next || (nextTrack ? `#/${nextTrack.id}/1` : "#/")}">
+          <button class="btn primary" data-go="${next || (nextTrack ? href(nextTrack.id, 1) : "#")}">
             ${next ? "Next →" : nextTrack ? `Next track: ${nextTrack.title} →` : "Finish 🎉"}</button>
         </div>
       </div>
@@ -267,7 +305,7 @@
           <div class="editor" data-pane="py"></div>
           <div class="editor" data-pane="cmp" hidden></div>
           ${runnable
-            ? `<div class="console"><span class="label">output</span><span class="sys">Press ▶ Run (or Ctrl/⌘ + Enter). Edit the code freely: break it, fix it.</span></div>`
+            ? `<div class="console"><span class="label">output</span><span class="sys">Press ▶ Run (or Ctrl/⌘ + Enter) to see the output.</span></div>`
             : `<div class="local-note">🖥️ This snippet needs a real server, threads or packages that do not run in the browser.
                Run the matching lab locally — see <code>labs/README.md</code>.</div>`}
         </section>
@@ -289,12 +327,12 @@
         document.querySelectorAll("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== tab.dataset.tab));
       }
       const act = e.target.closest("[data-act]");
-      if (act?.dataset.act === "run") runPython(editor.value, consoleEl);
+      if (act?.dataset.act === "run") runPython(editor.value, consoleEl, `${track.id}-${idx + 1}`, step.code);
       if (act?.dataset.act === "reset") editor.value = step.code;
     });
     if (editor.textarea) {
       editor.textarea.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runPython(editor.value, consoleEl); }
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runPython(editor.value, consoleEl, `${track.id}-${idx + 1}`, step.code); }
       });
     }
 
@@ -303,7 +341,7 @@
       b.addEventListener("click", () => { if (b.dataset.go) location.hash = b.dataset.go; }));
     document.querySelectorAll(".node").forEach((n) => n.addEventListener("click", () => {
       const i = track.steps.findIndex((s) => s.node === n.dataset.node);
-      if (i >= 0) location.hash = `#/${track.id}/${i + 1}`;
+      if (i >= 0) location.hash = href(track.id, i + 1);
     }));
 
     // quiz
@@ -357,7 +395,9 @@
 
   // ---------------------------------------------------------------- router
   function route() {
-    const [, trackId, stepStr] = location.hash.split("/");
+    // "#api-5" (current) or "#/api/5" (old links)
+    const m = location.hash.match(/^#\/?([a-z]+)[-/](\d+)/) || location.hash.match(/^#\/?([a-z]+)$/);
+    const trackId = m && m[1], stepStr = m && m[2];
     const track = TRACKS.find((t) => t.id === trackId);
     if (!track) return renderHome();
     const idx = Math.min(Math.max(parseInt(stepStr, 10) || 1, 1), track.steps.length) - 1;

@@ -70,8 +70,13 @@ python-academy/
 All content is data in `web/content.js`. A track is a list of `nodes` (the diagram) and `steps`;
 each step points at a node and has `concept`, `code`, `compare`, `tip` and `quiz`.
 Set `run: false` for code that needs a server, threads or packages that don't run in the browser.
-After editing, check that every runnable snippet still works:
+After editing, check that every runnable snippet still works, then refresh the recorded outputs
+(shown when live Python can't run, e.g. offline or in the shared online copy):
 
 ```
 node tools/check_snippets.js
+```
+
+```
+node tools/record_outputs.js
 ```
